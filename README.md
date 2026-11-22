@@ -1,21 +1,44 @@
-# AI News Intelligence Agent
+# AI News Intelligence
 
-A beginner-friendly Streamlit application that reads publisher RSS feeds, checks accessible article pages where permitted, identifies AI-related articles, summarizes available reporting, and stores results in SQLite. It is one multi-step agent with separate Python modules for collection, analysis, storage, and display. The dashboard uses built-in Python data structures for filtering and chart preparation to keep its runtime lightweight.
+A multi-agent style research workflow and interactive Streamlit dashboard for recent AI coverage from Times of India, The Economic Times, Hindustan Times, and Amar Ujala. The project prioritizes traceable source pages over a fixed number of articles.
 
-## Architecture
+## What it does
+
+The named agents run in sequence over one shared article record:
 
 ```text
-Publisher RSS feeds → news_collector.py → news_analyzer.py → database.py (SQLite)
-                                                                     ↓
-                                                        app.py (Streamlit dashboard)
+Publisher RSS feeds
+       ↓
+Research Agent → recent AI candidates, exact headline/source/date/original URL
+       ↓
+Verification Agent → opens original publisher page, checks domain/headline/visible date/text support
+       ↓
+Classification Agent → Generative AI, Machine Learning, Robotics, AI Business,
+                       AI Research, AI Safety & Governance, AI in Society
+       ↓
+Summarization Agent → 50–70 simple-English words for Verified articles only
+       ↓
+Editorial Agent → remove duplicate stories and irrelevant articles
+       ↓
+Shared JSON ledger → Streamlit dashboard + Markdown report + verification ledger
 ```
 
-The optional OpenAI API analyzes relevance, categories, summaries, and importance. Without an API key, keyword rules run locally; they do not claim a verified 3–5 sentence summary where the accessible source text is missing. Feed excerpts and article pages may be incomplete. The dashboard links to publisher originals.
+The workflow is implemented as sequential specialist agents, not parallel calls. Full article text is used transiently for checks and summaries; the shared ledger stores metadata, evidence notes, and summaries, not full article bodies.
 
-## Setup (Windows PowerShell)
+## Dashboard
+
+- Rolling latest-seven-days coverage in Asia/Kolkata time.
+- Discovered, Verified, Needs Review, and Unverified totals.
+- Verified article cards with headline, publisher, page-displayed date, categories, word-counted summary, verification badge, and original-source link.
+- Search and publisher, category, and verification-status filters.
+- Category breakdown and industry insights derived only from Verified records.
+- A separate verification ledger with reasons and evidence for unresolved or editorially excluded records.
+- Refresh action and a downloadable Markdown report generated from the same JSON ledger.
+
+## Run on Windows
 
 1. Install Python 3.10 or newer.
-2. Open PowerShell in this folder and create an environment:
+2. Open PowerShell in this folder and prepare the environment:
 
    ```powershell
    py -m venv .venv
@@ -24,39 +47,48 @@ The optional OpenAI API analyzes relevance, categories, summaries, and importanc
    pip install -r requirements.txt
    ```
 
-3. Copy the sample settings and optionally add your API key and model:
-
-   ```powershell
-   Copy-Item .env.example .env
-   ```
-
-   Edit `.env` in a text editor. `.env` is ignored by git (do not commit real keys).
+3. Optional: copy `.env.example` to `.env` and add an OpenAI API key for abstractive summaries. The project still runs without a key using a cautious, source-grounded fallback.
 4. Start the dashboard:
 
    ```powershell
    streamlit run app.py
    ```
 
-5. Select **Refresh News** to collect and analyze live feed items. The SQLite database is created as `news.db` on first use.
+5. Open the local address printed by Streamlit. Use **Refresh latest news** to run the live workflow.
 
-## Feeds and access
+## Current reviewed snapshot
 
-Default feeds are configured in `news_collector.py`; URLs can be overridden through the `RSS_*` settings in `.env`. The Times Internet publishers' RSS terms limit use to personal, non-commercial use and prohibit further publication; use this app only within the permissions applicable to you. Publisher feed URLs and terms can change, so confirm the current terms before use. Collection handles unavailable feeds and network failures without fabricating article records. Page extraction is best effort; it does not sign in, evade blocks, or bypass paywalls. Article text is processed transiently and is not written to SQLite. If an article cannot be accessed, the agent uses only available RSS metadata/text and explicitly marks insufficient content in its summary.
+The repository includes a real, source-checked snapshot in `data/article_records.json`, reviewed on November 22, 2026. It covers November 16–22, 2026 and starts with five verified article records from the four publishers. These are not fabricated sample stories. The refresh action rechecks pages; pages that cannot be opened, have conflicting dates, or do not substantiate descriptions remain in Needs Review or Unverified status and are excluded from the Verified feed.
 
-The dashboard's total counts reflect stored AI-related articles and the records successfully analyzed; it does not retain rejected irrelevant entries. Remove `news.db` to clear local article history.
+`outputs/latest_ai_news_report.md` is rendered from that same snapshot. The dashboard also reads that JSON file, so article totals and report totals share one source of truth.
+
+## Verification policy and limitations
+
+- The original publisher page is the primary evidence. Search snippets and RSS text alone never earn Verified status.
+- The verifier checks the publisher domain, page headline, visible page date, and description terms in the article text. A publisher page supports what that publisher reported; it does not independently prove every reported claim.
+- The displayed date label is preserved, including “Last Updated” where that is what the page shows. The seven-day window uses the visible date in Asia/Kolkata time.
+- If a page is blocked, the date is missing or conflicts, or the article text does not support the description, the record remains Needs Review. A host mismatch or headline mismatch is Unverified.
+- The summarizer only runs on Verified records and enforces 50–70 whitespace-separated words. If a grounded summary cannot be produced, the record is moved to Needs Review.
+- Publisher feeds and terms can change. Respect each publisher's RSS, robots, copyright, and reuse terms. The app does not bypass access controls or paywalls.
+
+## Files
+
+- `app.py` — responsive interactive Streamlit dashboard.
+- `agents.py` — Research, Verification, Classification, Summarization, and Editorial agents.
+- `news_collector.py` — publisher RSS discovery and permitted page extraction.
+- `reporting.py` — report generation and shared status counts.
+- `data/article_records.json` — common article, evidence, category, and summary ledger.
+- `outputs/latest_ai_news_report.md` — report generated from the ledger.
+- `.env.example` — optional configuration template.
 
 ## Configuration
 
 | Variable | Purpose |
 | --- | --- |
-| `OPENAI_API_KEY` | Optional key for LLM classification and analysis |
-| `OPENAI_MODEL` | Model name; defaults to `gpt-4o-mini` |
-| `RSS_AMAR_UJALA`, `RSS_HINDUSTAN_TIMES`, `RSS_TIMES_OF_INDIA`, `RSS_ECONOMIC_TIMES` | Optional comma-separated feed URL overrides |
-| `NEWS_DB_PATH` | SQLite file path (defaults to `news.db`) |
-| `REQUEST_TIMEOUT` | HTTP timeout in seconds |
+| `OPENAI_API_KEY` | Optional API key for article summaries; keep it only in `.env`. |
+| `OPENAI_MODEL` | Optional model name; defaults to `gpt-4o-mini`. |
+| `RSS_AMAR_UJALA`, `RSS_HINDUSTAN_TIMES`, `RSS_TIMES_OF_INDIA`, `RSS_ECONOMIC_TIMES` | Optional comma-separated RSS feed overrides. |
+| `NEWS_LEDGER_PATH` | Optional override for the JSON article ledger. |
+| `NEWS_REPORT_PATH` | Optional override for the generated Markdown report. |
+| `REQUEST_TIMEOUT` | HTTP timeout in seconds for publisher pages and feeds. |
 
-## Notes
-
-- Article text is processed for the personal news dashboard; comply with each publisher's terms and applicable law.
-- Summary fields are based only on retrieved feed/article text. Publisher links remain the canonical source.
-- Ranking combines recency in the dashboard ordering with a 1–5 importance score from the analyzer.
